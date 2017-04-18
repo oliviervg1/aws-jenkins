@@ -1,0 +1,76 @@
+stacker_bucket: oliviervg-cloudformation
+sys_path: ./stacks/
+
+stacks:
+  - name: jenkins-elb-security-group
+    class_path: security_groups.SecurityGroup
+    variables:
+      Description: "jenkins ELB security group"
+      VpcId: ${xref core-vpc::VpcId}
+      SecurityGroupIngress:
+        - FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          IpProtocol: "6"
+      SecurityGroupEgress:
+        - FromPort: 8080
+          ToPort: 8080
+          CidrIp: 10.0.2.0/24
+          IpProtocol: "6"
+        - FromPort: 8080
+          ToPort: 8080
+          CidrIp: 10.0.3.0/24
+          IpProtocol: "6"
+      Tags:
+        Name: "jenkins-elb"
+
+  - name: jenkins-security-group
+    class_path: security_groups.SecurityGroup
+    variables:
+      Description: "jenkins cluster security group"
+      VpcId: ${xref core-vpc::VpcId}
+      SecurityGroupIngress:
+        - FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId: ${output jenkins-elb-security-group::SecurityGroupId}
+          IpProtocol: "6"
+      SecurityGroupEgress:
+        - FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+          IpProtocol: "6"
+      Tags:
+        Name: "jenkins"
+
+  - name: autoscaling-group
+    class_path: autoscaling.AutoscalingGroup
+    variables:
+      AppName: jenkins
+      ElbPublicSubnetIds:
+        - ${xref core-subnets::PublicSubnetEuWest2aId}
+        - ${xref core-subnets::PublicSubnetEuWest2bId}
+      ElbListeners:
+        - InstancePort: 8080
+          InstanceProtocol: HTTP
+          LoadBalancerPort: 80
+          Protocol: HTTP
+      ElbSecurityGroups:
+        - ${output jenkins-elb-security-group::SecurityGroupId}
+      ElbHealthcheck:
+        HealthyThreshold: 2
+        Interval: 10
+        Target: TCP:8080
+        Timeout: 5
+        UnhealthyThreshold: 5
+      PrivateSubnetIds:
+        - ${xref core-subnets::PrivateSubnetEuWest2aId}
+        - ${xref core-subnets::PrivateSubnetEuWest2bId}
+      KeyName: oliviervg
+      ImageId: ami-11130775
+      InstanceType: t2.micro
+      AsgSecurityGroups:
+        - ${output jenkins-security-group::SecurityGroupId}
+      VolumeSize: 10
+      Userdata: ./userdata/jenkins.sh
+      Tags:
+        Name: "jenkins"
