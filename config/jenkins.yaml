@@ -8,8 +8,8 @@ stacks:
       Description: "jenkins ELB security group"
       VpcId: ${xref core-vpc::VpcId}
       SecurityGroupIngress:
-        - FromPort: 80
-          ToPort: 80
+        - FromPort: 443
+          ToPort: 443
           CidrIp: 0.0.0.0/0
           IpProtocol: "6"
       SecurityGroupEgress:
@@ -42,8 +42,8 @@ stacks:
       Tags:
         Name: "jenkins"
 
-  - name: autoscaling-group
-    class_path: autoscaling.AutoscalingGroup
+  - name: application
+    class_path: autoscaling.AppWithDns
     variables:
       AppName: jenkins
       ElbPublicSubnetIds:
@@ -52,8 +52,9 @@ stacks:
       ElbListeners:
         - InstancePort: 8080
           InstanceProtocol: HTTP
-          LoadBalancerPort: 80
-          Protocol: HTTP
+          LoadBalancerPort: 443
+          Protocol: HTTPS
+          SSLCertificateId: arn:aws:acm:eu-west-2:658878626892:certificate/2b5e265c-3710-420d-a987-dd26a4d1842a
       ElbSecurityGroups:
         - ${output jenkins-elb-security-group::SecurityGroupId}
       ElbHealthcheck:
@@ -68,9 +69,12 @@ stacks:
       KeyName: oliviervg
       ImageId: ami-11130775
       InstanceType: t2.micro
+      IamInstanceProfile: jenkins
       AsgSecurityGroups:
         - ${output jenkins-security-group::SecurityGroupId}
       VolumeSize: 10
       Userdata: ./userdata/jenkins.sh
+      HostedZoneName: oliviervg.com.
+      DNS: jenkins.oliviervg.com.
       Tags:
         Name: "jenkins"

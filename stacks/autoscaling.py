@@ -1,15 +1,16 @@
-from troposphere import Ref, Base64
+from troposphere import Ref, Base64, GetAtt
 from troposphere.ec2 import Tag
 from troposphere.autoscaling import Tag as AsgTag
 from troposphere.autoscaling import AutoScalingGroup, LaunchConfiguration
 from troposphere.autoscaling import BlockDeviceMapping, EBSBlockDevice
 from troposphere.elasticloadbalancing import LoadBalancer, HealthCheck
 from troposphere.policies import UpdatePolicy, AutoScalingRollingUpdate
+from troposphere.route53 import RecordSetGroup, RecordSet
 
 from stacker.blueprints.base import Blueprint
 
 
-class AutoscalingGroup(Blueprint):
+class AppWithDns(Blueprint):
 
     VARIABLES = {
         "AppName": {
@@ -19,7 +20,7 @@ class AutoscalingGroup(Blueprint):
         "ElbPublicSubnetIds": {
             "type": list,
             "description": (
-                "List of public subnets to spin up the Jenkins ELBs in"
+                "List of public subnets to spin up ELBs in"
             )
         },
         "ElbListeners": {
@@ -36,9 +37,7 @@ class AutoscalingGroup(Blueprint):
         },
         "PrivateSubnetIds": {
             "type": list,
-            "description": (
-                "List of private subnets to spin up the Jenkins in"
-            )
+            "description": "List of private subnets to spin up instances in"
         },
         "KeyName": {
             "type": str,
@@ -46,11 +45,11 @@ class AutoscalingGroup(Blueprint):
         },
         "ImageId": {
             "type": str,
-            "description": "Base AMI to use for Jenkins"
+            "description": "Base AMI to use"
         },
         "InstanceType": {
             "type": str,
-            "description": "EC2 instance size to use for Jenkins"
+            "description": "EC2 instance size to use"
         },
         "AsgSecurityGroups": {
             "type": list,
@@ -60,12 +59,25 @@ class AutoscalingGroup(Blueprint):
             "type": int,
             "description": "Size of EBS volume"
         },
+        "IamInstanceProfile": {
+            "type": str,
+            "description": "IAM role to attach to instance"
+        },
         "Userdata": {
             "type": str,
             "description": "Path to userdata script"
         },
         "Tags": {
-            "type": dict
+            "type": dict,
+            "description": "Tags to apply to resources"
+        },
+        "HostedZoneName": {
+            "type": str,
+            "description": "Hosted Zone to create DNS in"
+        },
+        "DNS": {
+            "type": str,
+            "description": "DNS for application"
         }
     }
 
@@ -101,6 +113,7 @@ class AutoscalingGroup(Blueprint):
             KeyName=variables["KeyName"],
             SecurityGroups=variables["AsgSecurityGroups"],
             InstanceType=variables["InstanceType"],
+            IamInstanceProfile=variables["IamInstanceProfile"],
             AssociatePublicIpAddress="false",
             BlockDeviceMappings=[
                 BlockDeviceMapping(
@@ -134,6 +147,23 @@ class AutoscalingGroup(Blueprint):
             ]
         ))
 
+    def create_dns(self):
+        variables = self.get_variables()
+
+        self.template.add_resource(RecordSetGroup(
+            "DNS",
+            HostedZoneName=variables["HostedZoneName"],
+            RecordSets=[
+                RecordSet(
+                    Name=variables["DNS"],
+                    ResourceRecords=[GetAtt(self.load_balancer, "DNSName")],
+                    Type="CNAME",
+                    TTL=300
+                )
+            ]
+        ))
+
     def create_template(self):
         self.create_elb()
         self.create_autoscaling_group()
+        self.create_dns()
