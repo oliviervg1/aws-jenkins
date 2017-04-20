@@ -17,8 +17,8 @@ yum remove -y java-1.7.0-openjdk
 yum install -y git
 
 # Install Jenkins
-wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat/jenkins.repo
-rpm --import https://pkg.jenkins.io/redhat/jenkins-ci.org.key
+wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
+rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io.key
 yum install -y jenkins
 
 # Restore possible backup
