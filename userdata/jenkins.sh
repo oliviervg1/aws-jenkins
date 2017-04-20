@@ -13,6 +13,9 @@ yum update -y
 yum install -y java-1.8.0-openjdk
 yum remove -y java-1.7.0-openjdk
 
+# Install dependencies
+yum install -y git
+
 # Install Jenkins
 wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat/jenkins.repo
 rpm --import https://pkg.jenkins.io/redhat/jenkins-ci.org.key
