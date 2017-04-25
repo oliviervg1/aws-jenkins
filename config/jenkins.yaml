@@ -67,7 +67,7 @@ stacks:
         - ${xref core-subnets::PrivateSubnetEuWest2aId}
         - ${xref core-subnets::PrivateSubnetEuWest2bId}
       KeyName: oliviervg
-      ImageId: ami-11130775
+      ImageId: ami-82aaa0e6
       InstanceType: t2.micro
       IamInstanceProfile: jenkins
       AsgSecurityGroups:

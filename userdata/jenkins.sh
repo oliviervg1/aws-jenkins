@@ -9,17 +9,12 @@ S3_BACKUP=s3://oliviervg-jenkins/
 yum clean all
 yum update -y
 
-# Get Java 8
-yum install -y java-1.8.0-openjdk
-yum remove -y java-1.7.0-openjdk
-
 # Install dependencies
-yum install -y git
+zypper install -y git
 
 # Install Jenkins
-wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
-rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io.key
-yum install -y jenkins
+zypper addrepo -f https://pkg.jenkins.io/opensuse-stable/ jenkins
+zypper --gpg-auto-import-keys install -y jenkins
 
 # Restore possible backup
 if [[ $S3_BACKUP == */ ]]; then
@@ -32,12 +27,13 @@ tar zxf $LOCAL_BACKUP -C $JENKINS_HOME
 rm -f $LOCAL_BACKUP
 
 # Start Jenkins
-service jenkins start
+systemctl enable jenkins
+systemctl start jenkins
 
 # Initial setup
 if [[ ! -f /var/lib/jenkins/setup_complete ]]; then
     until $(curl -s -m 60 -o /dev/null -I -f -u "admin:$(cat /var/lib/jenkins/secrets/initialAdminPassword)" http://localhost:8080/cli/); do printf "."; sleep 1; done
     echo 'jenkins.model.Jenkins.instance.securityRealm.createAccount("admin", "Password123")' | java -jar /var/cache/jenkins/war/WEB-INF/jenkins-cli.jar -s "http://localhost:8080/" -noKeyAuth groovy = --username admin --password "$(cat /var/lib/jenkins/secrets/initialAdminPassword)"
     touch /var/lib/jenkins/setup_complete
-    service jenkins restart
+    systemctl restart jenkins
 fi
