@@ -1,21 +1,20 @@
-from troposphere import Ref, Base64, GetAtt
+from troposphere import Ref, Base64, GetAtt, Output
 from troposphere.ec2 import Tag
 from troposphere.autoscaling import Tag as AsgTag
 from troposphere.autoscaling import AutoScalingGroup, LaunchConfiguration
 from troposphere.autoscaling import BlockDeviceMapping, EBSBlockDevice
 from troposphere.elasticloadbalancing import LoadBalancer, HealthCheck
 from troposphere.policies import UpdatePolicy, AutoScalingRollingUpdate
-from troposphere.route53 import RecordSetGroup, RecordSet
 
 from stacker.blueprints.base import Blueprint
 
 
-class AppWithDns(Blueprint):
+class ELB(Blueprint):
 
     VARIABLES = {
-        "AppName": {
+        "ElbName": {
             "type": str,
-            "description": "Name of application"
+            "description": "Name of ELB"
         },
         "ElbPublicSubnetIds": {
             "type": list,
@@ -35,6 +34,50 @@ class AppWithDns(Blueprint):
             "type": dict,
             "description": "ELB healthcheck"
         },
+        "Tags": {
+            "type": dict,
+            "description": "Tags to apply to resources"
+        }
+    }
+
+    def create_elb(self):
+        variables = self.get_variables()
+
+        self.load_balancer = self.template.add_resource(LoadBalancer(
+            "ElasticLoadBalancer",
+            LoadBalancerName=variables["ElbName"],
+            Subnets=variables["ElbPublicSubnetIds"],
+            Listeners=variables["ElbListeners"],
+            SecurityGroups=variables["ElbSecurityGroups"],
+            HealthCheck=HealthCheck(
+                **variables["ElbHealthcheck"]
+            ),
+            CrossZone=True,
+            Tags=[
+                Tag(key, value)
+                for key, value in variables["Tags"].iteritems()
+            ]
+        ))
+
+        self.template.add_output(Output(
+            "ElbName",
+            Description="ELB name",
+            Value=Ref(self.load_balancer)
+        ))
+
+        self.template.add_output(Output(
+            "ElbDNS",
+            Description="ELB DNS",
+            Value=GetAtt(self.load_balancer, "DNSName")
+        ))
+
+    def create_template(self):
+        self.create_elb()
+
+
+class ASG(Blueprint):
+
+    VARIABLES = {
         "PrivateSubnetIds": {
             "type": list,
             "description": "List of private subnets to spin up instances in"
@@ -42,6 +85,10 @@ class AppWithDns(Blueprint):
         "KeyName": {
             "type": str,
             "description": "Key name to use for SSH"
+        },
+        "ElbName": {
+            "type": str,
+            "description": "Name of ELB"
         },
         "ImageId": {
             "type": str,
@@ -70,35 +117,8 @@ class AppWithDns(Blueprint):
         "Tags": {
             "type": dict,
             "description": "Tags to apply to resources"
-        },
-        "HostedZoneName": {
-            "type": str,
-            "description": "Hosted Zone to create DNS in"
-        },
-        "DNS": {
-            "type": str,
-            "description": "DNS for application"
         }
     }
-
-    def create_elb(self):
-        variables = self.get_variables()
-
-        self.load_balancer = self.template.add_resource(LoadBalancer(
-            "ElasticLoadBalancer",
-            LoadBalancerName="{}-elb".format(variables["AppName"]),
-            Subnets=variables["ElbPublicSubnetIds"],
-            Listeners=variables["ElbListeners"],
-            SecurityGroups=variables["ElbSecurityGroups"],
-            HealthCheck=HealthCheck(
-                **variables["ElbHealthcheck"]
-            ),
-            CrossZone=True,
-            Tags=[
-                Tag(key, value)
-                for key, value in variables["Tags"].iteritems()
-            ]
-        ))
 
     def create_autoscaling_group(self):
         variables = self.get_variables()
@@ -133,7 +153,7 @@ class AppWithDns(Blueprint):
             MinSize="1",
             MaxSize="1",
             VPCZoneIdentifier=variables["PrivateSubnetIds"],
-            LoadBalancerNames=[Ref(self.load_balancer)],
+            LoadBalancerNames=[variables["ElbName"]],
             UpdatePolicy=UpdatePolicy(
                 AutoScalingRollingUpdate=AutoScalingRollingUpdate(
                     PauseTime="PT0S",
@@ -147,23 +167,5 @@ class AppWithDns(Blueprint):
             ]
         ))
 
-    def create_dns(self):
-        variables = self.get_variables()
-
-        self.template.add_resource(RecordSetGroup(
-            "DNS",
-            HostedZoneName=variables["HostedZoneName"],
-            RecordSets=[
-                RecordSet(
-                    Name=variables["DNS"],
-                    ResourceRecords=[GetAtt(self.load_balancer, "DNSName")],
-                    Type="CNAME",
-                    TTL=300
-                )
-            ]
-        ))
-
     def create_template(self):
-        self.create_elb()
         self.create_autoscaling_group()
-        self.create_dns()

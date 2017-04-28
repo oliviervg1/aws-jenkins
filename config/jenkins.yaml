@@ -2,10 +2,10 @@ stacker_bucket: oliviervg-cloudformation
 sys_path: ./stacks/
 
 stacks:
-  - name: jenkins-elb-security-group
+  - name: ${namespace}-elb-security-group
     class_path: security_groups.SecurityGroup
     variables:
-      Description: "jenkins ELB security group"
+      Description: "${namespace} ELB security group"
       VpcId: ${xref core-vpc::VpcId}
       SecurityGroupIngress:
         - FromPort: 443
@@ -22,17 +22,17 @@ stacks:
           CidrIp: 10.0.3.0/24
           IpProtocol: "6"
       Tags:
-        Name: "jenkins-elb"
+        Name: ${namespace}-elb
 
-  - name: jenkins-security-group
+  - name: ${namespace}-security-group
     class_path: security_groups.SecurityGroup
     variables:
-      Description: "jenkins cluster security group"
+      Description: ${namespace} cluster security group
       VpcId: ${xref core-vpc::VpcId}
       SecurityGroupIngress:
         - FromPort: 8080
           ToPort: 8080
-          SourceSecurityGroupId: ${output jenkins-elb-security-group::SecurityGroupId}
+          SourceSecurityGroupId: ${output ${namespace}-elb-security-group::SecurityGroupId}
           IpProtocol: "6"
       SecurityGroupEgress:
         - FromPort: 0
@@ -40,12 +40,12 @@ stacks:
           CidrIp: 0.0.0.0/0
           IpProtocol: "6"
       Tags:
-        Name: "jenkins"
+        Name: ${namespace}
 
-  - name: application
-    class_path: autoscaling.AppWithDns
+  - name: elb
+    class_path: autoscaling.ELB
     variables:
-      AppName: jenkins
+      ElbName: ${namespace}-elb
       ElbPublicSubnetIds:
         - ${xref core-subnets::PublicSubnetEuWest2aId}
         - ${xref core-subnets::PublicSubnetEuWest2bId}
@@ -56,25 +56,41 @@ stacks:
           Protocol: HTTPS
           SSLCertificateId: arn:aws:acm:eu-west-2:658878626892:certificate/2b5e265c-3710-420d-a987-dd26a4d1842a
       ElbSecurityGroups:
-        - ${output jenkins-elb-security-group::SecurityGroupId}
+        - ${output ${namespace}-elb-security-group::SecurityGroupId}
       ElbHealthcheck:
         HealthyThreshold: 2
         Interval: 10
         Target: TCP:8080
         Timeout: 5
         UnhealthyThreshold: 5
+      Tags:
+        Name: ${namespace}-elb
+
+  - name: asg
+    class_path: autoscaling.ASG
+    variables:
+      AppName: ${namespace}
       PrivateSubnetIds:
         - ${xref core-subnets::PrivateSubnetEuWest2aId}
         - ${xref core-subnets::PrivateSubnetEuWest2bId}
       KeyName: oliviervg
       ImageId: ami-11130775
       InstanceType: t2.micro
-      IamInstanceProfile: jenkins
+      IamInstanceProfile: ${namespace}
+      ElbName: ${output ${namespace}-elb::ElbName}
       AsgSecurityGroups:
-        - ${output jenkins-security-group::SecurityGroupId}
+        - ${output ${namespace}-security-group::SecurityGroupId}
       VolumeSize: 10
-      Userdata: ./userdata/jenkins.sh
-      HostedZoneName: oliviervg.com.
-      DNS: jenkins.oliviervg.com.
+      Userdata: ./userdata/${namespace}.sh
       Tags:
-        Name: "jenkins"
+        Name: ${namespace}
+
+  - name: dns
+    class_path: dns.RecordSet
+    variables:
+      HostedZoneName: oliviervg.com.
+      DNS: ${namespace}.oliviervg.com.
+      ResourceRecords:
+        - ${output ${namespace}-elb::ElbDNS}
+      Type: CNAME
+      TTL: 300
