@@ -21,16 +21,6 @@ wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenki
 rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io.key
 yum install -y jenkins
 
-# Restore possible backup
-if [[ $S3_BACKUP_BUCKET == */ ]]; then
-    S3_BACKUP_BUCKET=$S3_BACKUP_BUCKET`aws s3 ls $S3_BACKUP_BUCKET|tail -1|awk '{print $NF}'`
-fi
-LOCAL_BACKUP=/tmp/`basename $S3_BACKUP_BUCKET`
-aws s3 cp $S3_BACKUP_BUCKET $LOCAL_BACKUP
-mkdir -p $JENKINS_HOME
-tar zxf $LOCAL_BACKUP -C $JENKINS_HOME
-rm -f $LOCAL_BACKUP
-
 # Enable backup script
 cat >/usr/local/bin/jenkins_backup <<EOL
 #!/bin/bash -e
@@ -62,6 +52,16 @@ echo "0 * * * * root /usr/local/bin/jenkins_backup >> /var/log/jenkins_backup.lo
 chown root:root /etc/cron.d/jenkins
 chmod 644 /etc/cron.d/jenkins
 service crond restart
+
+# Restore possible backup
+if [[ $S3_BACKUP_BUCKET == */ ]]; then
+    S3_BACKUP_BUCKET=$S3_BACKUP_BUCKET`aws s3 ls $S3_BACKUP_BUCKET|tail -1|awk '{print $NF}'`
+fi
+LOCAL_BACKUP=/tmp/`basename $S3_BACKUP_BUCKET`
+aws s3 cp $S3_BACKUP_BUCKET $LOCAL_BACKUP
+mkdir -p $JENKINS_HOME
+tar zxf $LOCAL_BACKUP -C $JENKINS_HOME
+rm -f $LOCAL_BACKUP
 
 # Start Jenkins
 service jenkins start
