@@ -26,7 +26,7 @@ cat >/usr/local/bin/jenkins_backup <<EOL
 #!/bin/bash -e
 
 S3_BACKUP_BUCKET=$S3_BACKUP_BUCKET
-S3_BACKUP_FILENAME=\`date +%Y-%m-%d:%H:%M:%S\`.zip
+S3_BACKUP_FILENAME=backup-\`date +%Y-%m-%d:%H:%M:%S\`.zip
 LOCAL_BACKUP=/tmp/\`basename \$S3_BACKUP_FILENAME\`
 
 tar -C $JENKINS_HOME -zcf \$LOCAL_BACKUP . \
